@@ -1,0 +1,55 @@
+#Script untuk create vm dengan eksisting VHD, ResourceGroup, VNet, NIC, Storage Account
+
+# Navigate to the downloaded folder and import the **Connect** PowerShell module
+Set-ExecutionPolicy RemoteSigned
+cd C:\AzureStack-Tools-master\
+Import-Module .\Connect\AzureStack.Connect.psm1
+
+# For Azure Stack development kit, this value is set to https://management.local.azurestack.external. To get this value for Azure Stack integrated systems, contact your service provider.
+$ArmEndpoint = "https://management.jkt.cbncloud.co.id"
+
+# For Azure Stack development kit, this value is set to https://graph.local.azurestack.external/. To get this value for Azure Stack integrated systems, contact your service provider.
+$GraphAudience = "https://graph.windows.net/"
+
+# Register an AzureRM environment that targets your Azure Stack instance
+Add-AzureRMEnvironment `
+  -Name "AzureStackCustomer" `
+  -ArmEndpoint $ArmEndpoint
+
+# Set the GraphEndpointResourceId value
+Set-AzureRmEnvironment `
+  -Name "AzureStackCustomer" `
+  -GraphAudience $GraphAudience
+
+#Ganti Nama AAD/Customer0nya dibagian -AADTenantName
+# Get the Active Directory tenantId that is used to deploy Azure Stack
+$TenantID = Get-AzsDirectoryTenantId `
+  -AADTenantName "customer.onmicrosoft.com" `
+  -EnvironmentName "AzureStackCustomer"
+
+# Sign in to your environment
+Login-AzureRmAccount `
+  -EnvironmentName "AzureStackCustomer" `
+  -TenantId $TenantID
+
+#Define Virtual Machine parameter
+$ResourceGroup = "VG-INDOM-01"
+$location = "jkt"
+$mySubnetFrontEnd = "default"
+$myVnet = Get-AzureRmVirtualNetwork -Name "Vnet-IND-01" -ResourceGroupName $ResourceGroup
+$destinationVhd = "https://indomineral1101.blob.jkt.cbncloud.co.id/vhds/VM-INDOAD0120181102181610.vhd"
+
+
+#Mapping existing NIC
+$frontEnd = $myVnet.Subnets|?{$_.Name -eq 'default'}
+$nic1 = Get-AzureRmNetworkInterface -Name nic-idn-ad01 -ResourceGroupName $ResourceGroup
+
+#Define your VM with New-AzureRmVMConfig. The following example defines a VM named myVM and uses a VM size that supports more than two NICs (Standard_DS3_v2):
+$vmName = "VM-INDO-AD01"
+$vmConfig = New-AzureRmVMConfig -VMName $vmName -VMSize "Standard_A2" 
+$vmConfig = Set-AzureRmVMOSDisk -VM $vmConfig -Name "VM-INDO-AD01" -VhdUri $destinationVhd -CreateOption Attach -Windows
+$vmConfig = Add-AzureRmVMNetworkInterface -VM $vmConfig -Id $nic1.Id 
+
+#Create VM
+$vm = New-AzureRmVM -VM $vmConfig -Location $location -ResourceGroupName $resourceGroup
+ 
